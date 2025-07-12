@@ -11,26 +11,39 @@ const targetInput = document.getElementById('targetInput');
 // Initialize IndexedDB
 function initDB() {
     return new Promise((resolve, reject) => {
+        console.log('Attempting to open IndexedDB...');
         const request = indexedDB.open('PlayerManagerDB', 1);
         
         request.onerror = (event) => {
             console.error("Database error:", event.target.error);
-            reject("Database error");
+            reject(new Error("Database error: " + event.target.error.message));
         };
         
         request.onsuccess = (event) => {
             db = event.target.result;
+            console.log('Database opened successfully');
+            
+            // Add error handling for database operations
+            db.onerror = (event) => {
+                console.error('Database error:', event.target.error);
+            };
+            
             resolve();
         };
         
         request.onupgradeneeded = (event) => {
+            console.log('Database upgrade needed');
             const db = event.target.result;
+            
             if (!db.objectStoreNames.contains('players')) {
+                console.log('Creating players store');
                 const store = db.createObjectStore('players', { keyPath: 'id', autoIncrement: true });
                 store.createIndex('name', 'name', { unique: false });
                 store.createIndex('position', 'position', { unique: false });
             }
+            
             if (!db.objectStoreNames.contains('settings')) {
+                console.log('Creating settings store');
                 db.createObjectStore('settings');
             }
         };
@@ -39,89 +52,176 @@ function initDB() {
 
 // Load players from DB
 async function loadPlayers() {
-    const transaction = db.transaction(['players'], 'readonly');
-    const store = transaction.objectStore('players');
-    const request = store.getAll();
-    
-    return new Promise((resolve) => {
-        request.onsuccess = () => {
-            players = request.result || [];
-            resolve(players);
-        };
-    });
+    console.log('Loading players from DB...');
+    try {
+        const transaction = db.transaction(['players'], 'readonly');
+        const store = transaction.objectStore('players');
+        const request = store.getAll();
+        
+        return new Promise((resolve, reject) => {
+            request.onsuccess = () => {
+                players = request.result || [];
+                console.log(`Loaded ${players.length} players from DB`);
+                resolve(players);
+            };
+            
+            request.onerror = (event) => {
+                console.error('Error loading players:', event.target.error);
+                reject(new Error('Failed to load players'));
+            };
+        });
+    } catch (error) {
+        console.error('Error in loadPlayers:', error);
+        throw error;
+    }
 }
 
 // Load target value from DB
 async function loadTarget() {
-    const transaction = db.transaction(['settings'], 'readonly');
-    const store = transaction.objectStore('settings');
-    const request = store.get('targetValue');
-    
-    return new Promise((resolve) => {
-        request.onsuccess = () => {
-            targetValue = request.result;
-            if (targetValue) {
-                targetInput.value = targetValue;
-                document.getElementById('targetValue').textContent = targetValue;
-            }
-            resolve(targetValue);
-        };
-    });
+    console.log('Loading target value from DB...');
+    try {
+        const transaction = db.transaction(['settings'], 'readonly');
+        const store = transaction.objectStore('settings');
+        const request = store.get('targetValue');
+        
+        return new Promise((resolve) => {
+            request.onsuccess = () => {
+                targetValue = request.result;
+                console.log('Loaded target value:', targetValue);
+                if (targetValue) {
+                    targetInput.value = targetValue;
+                    document.getElementById('targetValue').textContent = targetValue;
+                }
+                resolve(targetValue);
+            };
+            
+            request.onerror = (event) => {
+                console.error('Error loading target:', event.target.error);
+                resolve(null);
+            };
+        });
+    } catch (error) {
+        console.error('Error in loadTarget:', error);
+        return null;
+    }
 }
 
 // Save player to DB
 async function savePlayer(player) {
-    const transaction = db.transaction(['players'], 'readwrite');
-    const store = transaction.objectStore('players');
-    
-    const request = editIndex >= 0 
-        ? store.put({ ...player, id: players[editIndex].id }) 
-        : store.add(player);
-    
-    await new Promise((resolve) => {
-        request.onsuccess = resolve;
-    });
+    console.log('Saving player:', player);
+    try {
+        const transaction = db.transaction(['players'], 'readwrite');
+        const store = transaction.objectStore('players');
+        
+        const request = editIndex >= 0 
+            ? store.put({ ...player, id: players[editIndex].id }) 
+            : store.add(player);
+        
+        return new Promise((resolve, reject) => {
+            request.onsuccess = () => {
+                console.log('Player saved successfully');
+                resolve();
+            };
+            
+            request.onerror = (event) => {
+                console.error('Error saving player:', event.target.error);
+                reject(new Error('Failed to save player'));
+            };
+        });
+    } catch (error) {
+        console.error('Error in savePlayer:', error);
+        throw error;
+    }
 }
 
 // Delete player from DB
 async function deletePlayerFromDB(id) {
-    const transaction = db.transaction(['players'], 'readwrite');
-    const store = transaction.objectStore('players');
-    const request = store.delete(id);
-    
-    await new Promise((resolve) => {
-        request.onsuccess = resolve;
-    });
+    console.log('Deleting player with id:', id);
+    try {
+        const transaction = db.transaction(['players'], 'readwrite');
+        const store = transaction.objectStore('players');
+        const request = store.delete(id);
+        
+        return new Promise((resolve, reject) => {
+            request.onsuccess = () => {
+                console.log('Player deleted successfully');
+                resolve();
+            };
+            
+            request.onerror = (event) => {
+                console.error('Error deleting player:', event.target.error);
+                reject(new Error('Failed to delete player'));
+            };
+        });
+    } catch (error) {
+        console.error('Error in deletePlayerFromDB:', error);
+        throw error;
+    }
 }
 
 // Save target to DB
 async function saveTarget(value) {
-    const transaction = db.transaction(['settings'], 'readwrite');
-    const store = transaction.objectStore('settings');
-    const request = store.put(value, 'targetValue');
-    
-    await new Promise((resolve) => {
-        request.onsuccess = resolve;
-    });
+    console.log('Saving target value:', value);
+    try {
+        const transaction = db.transaction(['settings'], 'readwrite');
+        const store = transaction.objectStore('settings');
+        const request = store.put(value, 'targetValue');
+        
+        return new Promise((resolve, reject) => {
+            request.onsuccess = () => {
+                console.log('Target saved successfully');
+                resolve();
+            };
+            
+            request.onerror = (event) => {
+                console.error('Error saving target:', event.target.error);
+                reject(new Error('Failed to save target'));
+            };
+        });
+    } catch (error) {
+        console.error('Error in saveTarget:', error);
+        throw error;
+    }
 }
 
 // Reset all data
 async function clearDB() {
-    const transaction = db.transaction(['players', 'settings'], 'readwrite');
-    const playersStore = transaction.objectStore('players');
-    const settingsStore = transaction.objectStore('settings');
-    
-    await Promise.all([
-        new Promise((resolve) => { playersStore.clear().onsuccess = resolve; }),
-        new Promise((resolve) => { settingsStore.clear().onsuccess = resolve; })
-    ]);
+    console.log('Clearing all DB data...');
+    try {
+        const transaction = db.transaction(['players', 'settings'], 'readwrite');
+        const playersStore = transaction.objectStore('players');
+        const settingsStore = transaction.objectStore('settings');
+        
+        await Promise.all([
+            new Promise((resolve, reject) => { 
+                playersStore.clear().onsuccess = resolve;
+                playersStore.clear().onerror = (event) => {
+                    console.error('Error clearing players:', event.target.error);
+                    reject(new Error('Failed to clear players'));
+                };
+            }),
+            new Promise((resolve, reject) => { 
+                settingsStore.clear().onsuccess = resolve;
+                settingsStore.clear().onerror = (event) => {
+                    console.error('Error clearing settings:', event.target.error);
+                    reject(new Error('Failed to clear settings'));
+                };
+            })
+        ]);
+        console.log('DB cleared successfully');
+    } catch (error) {
+        console.error('Error in clearDB:', error);
+        throw error;
+    }
 }
 
 // Render players table
 function renderTable() {
+    console.log('Rendering table...');
     const tableBody = document.getElementById('tableBody');
     
     if (players.length === 0) {
+        console.log('No players to display');
         tableBody.innerHTML = `
             <tr class="empty-state">
                 <td colspan="5">
@@ -133,6 +233,7 @@ function renderTable() {
         return;
     }
     
+    console.log(`Rendering ${players.length} players`);
     tableBody.innerHTML = players.map((player, index) => `
         <tr>
             <td>${player.name}</td>
@@ -149,6 +250,7 @@ function renderTable() {
 
 // Update statistics
 function updateStats() {
+    console.log('Updating stats...');
     const totalValue = players.reduce((sum, player) => sum + player.value, 0);
     const maxPlayers = parseInt(document.getElementById('maxPlayers').value) || 11;
     const remaining = targetValue ? Math.max(0, targetValue - totalValue) : 0;
@@ -158,31 +260,58 @@ function updateStats() {
     document.getElementById('totalValue').textContent = totalValue;
     document.getElementById('remainingValue').textContent = targetValue ? remaining : '-';
     document.getElementById('averageValue').textContent = targetValue ? (remainingPlayers > 0 ? average : '-') : '-';
+    
+    console.log('Stats updated:', {
+        totalValue,
+        remaining,
+        average,
+        remainingPlayers
+    });
 }
 
 // Add/Update player
 async function addPlayer() {
-    const name = document.getElementById('name').value.trim();
-    const position = document.getElementById('position').value;
-    const playingStyle = document.getElementById('playingStyle').value;
-    const value = parseInt(document.getElementById('value').value);
-    
-    if (!name || position === "select" || !playingStyle || isNaN(value) || value <= 0) {
-        alert("Please fill all fields with valid values");
-        return;
-    }
-    
-    const player = { name, position, playingStyle, value };
-    
+    console.log('Adding/updating player...');
     try {
+        const name = document.getElementById('name').value.trim();
+        const position = document.getElementById('position').value;
+        const playingStyle = document.getElementById('playingStyle').value;
+        const value = parseInt(document.getElementById('value').value);
+        
+        console.log('Form values:', { name, position, playingStyle, value });
+        
+        if (!name) {
+            alert("Please enter player name");
+            return;
+        }
+        
+        if (position === "select") {
+            alert("Please select player position");
+            return;
+        }
+        
+        if (!playingStyle) {
+            alert("Please select playing style");
+            return;
+        }
+        
+        if (isNaN(value) || value <= 0) {
+            alert("Please enter a valid positive value");
+            return;
+        }
+        
+        const player = { name, position, playingStyle, value };
+        
         await savePlayer(player);
         
         if (editIndex >= 0) {
             players[editIndex] = player;
             editIndex = -1;
             addPlayerBtn.textContent = 'Add Player';
+            console.log('Player updated successfully');
         } else {
             await loadPlayers();
+            console.log('New player added successfully');
         }
         
         // Reset form
@@ -194,13 +323,14 @@ async function addPlayer() {
         renderTable();
         updateStats();
     } catch (error) {
-        console.error("Error saving player:", error);
-        alert("Failed to save player");
+        console.error("Error in addPlayer:", error);
+        alert("Failed to save player: " + error.message);
     }
 }
 
 // Edit player
 function editPlayer(index) {
+    console.log('Editing player at index:', index);
     const player = players[index];
     document.getElementById('name').value = player.name;
     document.getElementById('position').value = player.position;
@@ -209,25 +339,32 @@ function editPlayer(index) {
     
     editIndex = index;
     addPlayerBtn.textContent = 'Update Player';
+    console.log('Player loaded for editing:', player);
 }
 
 // Delete player
 async function deletePlayer(id) {
-    if (!confirm('Are you sure you want to delete this player?')) return;
+    console.log('Deleting player with id:', id);
+    if (!confirm('Are you sure you want to delete this player?')) {
+        console.log('Deletion cancelled by user');
+        return;
+    }
     
     try {
         await deletePlayerFromDB(id);
         await loadPlayers();
         renderTable();
         updateStats();
+        console.log('Player deleted successfully');
     } catch (error) {
         console.error("Error deleting player:", error);
-        alert("Failed to delete player");
+        alert("Failed to delete player: " + error.message);
     }
 }
 
 // Update target value
 async function updateTarget() {
+    console.log('Updating target value...');
     const newTarget = parseInt(targetInput.value);
     
     if (isNaN(newTarget)) {
@@ -240,14 +377,20 @@ async function updateTarget() {
         await saveTarget(targetValue);
         document.getElementById('targetValue').textContent = targetValue;
         updateStats();
+        console.log('Target updated successfully');
     } catch (error) {
         console.error("Error updating target:", error);
+        alert("Failed to update target: " + error.message);
     }
 }
 
 // Reset all data
 async function resetApp() {
-    if (!confirm('Are you sure you want to reset ALL data? This cannot be undone.')) return;
+    console.log('Resetting app...');
+    if (!confirm('Are you sure you want to reset ALL data? This cannot be undone.')) {
+        console.log('Reset cancelled by user');
+        return;
+    }
     
     try {
         await clearDB();
@@ -264,14 +407,16 @@ async function resetApp() {
         
         renderTable();
         updateStats();
+        console.log('App reset successfully');
     } catch (error) {
         console.error("Error resetting app:", error);
-        alert("Failed to reset data");
+        alert("Failed to reset data: " + error.message);
     }
 }
 
 // Event Listeners
 document.addEventListener('DOMContentLoaded', async () => {
+    console.log('DOM fully loaded and parsed');
     try {
         await initDB();
         await loadPlayers();
@@ -280,6 +425,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         updateStats();
     } catch (error) {
         console.error("Initialization error:", error);
+        alert("Failed to initialize application: " + error.message);
     }
 });
 
