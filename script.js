@@ -3,13 +3,6 @@ let targetValue;
 let editIndex = -1;
 let db;
 
-// Define position order matching the dropdown
-const POSITION_ORDER = [
-  "CF", "SS", "RWF", "LWF", "AMF", 
-  "RMF", "LMF", "CMF", "DMF", 
-  "RB", "LB", "CB", "GK"
-];
-
 // DOM Elements
 const addPlayerBtn = document.getElementById('addPlayerBtn');
 const resetBtn = document.getElementById('resetBtn');
@@ -34,10 +27,7 @@ function initDB() {
             const db = event.target.result;
             
             if (!db.objectStoreNames.contains('players')) {
-                const store = db.createObjectStore('players', { 
-                    keyPath: 'id', 
-                    autoIncrement: true 
-                });
+                const store = db.createObjectStore('players', { keyPath: 'id', autoIncrement: true });
                 store.createIndex('name', 'name', { unique: false });
                 store.createIndex('position', 'position', { unique: false });
             }
@@ -49,26 +39,26 @@ function initDB() {
     });
 }
 
-// Load players from DB and sort them
+// Load players from DB
 async function loadPlayers() {
     try {
         const transaction = db.transaction(['players'], 'readonly');
         const store = transaction.objectStore('players');
         const request = store.getAll();
         
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
             request.onsuccess = () => {
                 players = request.result || [];
-                // Sort players by position order
-                players.sort((a, b) => {
-                    return POSITION_ORDER.indexOf(a.position) - POSITION_ORDER.indexOf(b.position);
-                });
                 resolve(players);
+            };
+            
+            request.onerror = (event) => {
+                reject(new Error('Failed to load players: ' + event.target.error));
             };
         });
     } catch (error) {
         console.error('Error in loadPlayers:', error);
-        return [];
+        throw error;
     }
 }
 
@@ -82,8 +72,15 @@ async function savePlayer(player) {
             ? store.put({ ...player, id: players[editIndex].id }) 
             : store.add(player);
         
-        await new Promise((resolve) => {
-            request.onsuccess = resolve;
+        return new Promise((resolve, reject) => {
+            request.onsuccess = () => {
+                console.log('Player saved successfully');
+                resolve();
+            };
+            
+            request.onerror = (event) => {
+                reject(new Error('Failed to save player: ' + event.target.error));
+            };
         });
     } catch (error) {
         console.error('Error in savePlayer:', error);
@@ -91,50 +88,7 @@ async function savePlayer(player) {
     }
 }
 
-// Render table with sorted players
-function renderTable() {
-    const tableBody = document.getElementById('tableBody');
-    
-    if (players.length === 0) {
-        tableBody.innerHTML = `
-            <tr class="empty-state">
-                <td colspan="5">
-                    <div class="empty-state-icon">⚽</div>
-                    <div>No players added yet. Add your first player above!</div>
-                </td>
-            </tr>
-        `;
-        return;
-    }
-    
-    tableBody.innerHTML = players.map((player, index) => `
-        <tr>
-            <td>${player.name}</td>
-            <td>${player.position}</td>
-            <td>${player.playingStyle}</td>
-            <td>${player.value}</td>
-            <td>
-                <button class="action-btn edit-btn" onclick="editPlayer(${index})">Edit</button>
-                <button class="action-btn delete-btn" onclick="deletePlayer(${player.id})">Delete</button>
-            </td>
-        </tr>
-    `).join('');
-}
-
-// Update statistics
-function updateStats() {
-    const totalValue = players.reduce((sum, player) => sum + player.value, 0);
-    const maxPlayers = parseInt(document.getElementById('maxPlayers').value) || 11;
-    const remaining = targetValue ? Math.max(0, targetValue - totalValue) : 0;
-    const remainingPlayers = Math.max(0, maxPlayers - players.length);
-    const average = remainingPlayers > 0 && targetValue ? Math.round(remaining / remainingPlayers) : 0;
-    
-    document.getElementById('totalValue').textContent = totalValue;
-    document.getElementById('remainingValue').textContent = targetValue ? remaining : '-';
-    document.getElementById('averageValue').textContent = targetValue ? (remainingPlayers > 0 ? average : '-') : '-';
-}
-
-// Add/Update player
+// Add/Update player with proper validation
 async function addPlayer() {
     try {
         const name = document.getElementById('name').value.trim();
@@ -142,6 +96,7 @@ async function addPlayer() {
         const playingStyle = document.getElementById('playingStyle').value;
         const value = parseInt(document.getElementById('value').value);
         
+        // Validation
         if (!name) throw new Error("Please enter player name");
         if (position === "select") throw new Error("Please select player position");
         if (!playingStyle) throw new Error("Please select playing style");
@@ -152,11 +107,13 @@ async function addPlayer() {
         await savePlayer(player);
         
         if (editIndex >= 0) {
+            // Update existing player
             players[editIndex] = player;
             editIndex = -1;
             addPlayerBtn.textContent = 'Add Player';
         } else {
-            await loadPlayers();
+            // Add new player
+            await loadPlayers(); // Reload to get the new player with ID
         }
         
         // Reset form
@@ -173,46 +130,28 @@ async function addPlayer() {
     }
 }
 
-// Edit player
-function editPlayer(index) {
-    const player = players[index];
-    document.getElementById('name').value = player.name;
-    document.getElementById('position').value = player.position;
-    document.getElementById('playingStyle').value = player.playingStyle;
-    document.getElementById('value').value = player.value;
+// Update statistics with default maxPlayers = 21
+function updateStats() {
+    const totalValue = players.reduce((sum, player) => sum + player.value, 0);
+    const maxPlayers = parseInt(document.getElementById('maxPlayers').value) || 21; // Changed default to 21
+    const remaining = targetValue ? Math.max(0, targetValue - totalValue) : 0;
+    const remainingPlayers = Math.max(0, maxPlayers - players.length);
+    const average = remainingPlayers > 0 && targetValue ? Math.round(remaining / remainingPlayers) : 0;
     
-    editIndex = index;
-    addPlayerBtn.textContent = 'Update Player';
+    document.getElementById('totalValue').textContent = totalValue;
+    document.getElementById('remainingValue').textContent = targetValue ? remaining : '-';
+    document.getElementById('averageValue').textContent = targetValue ? (remainingPlayers > 0 ? average : '-') : '-';
 }
 
-// Delete player
-async function deletePlayer(id) {
-    if (!confirm('Are you sure you want to delete this player?')) return;
-    
-    try {
-        const transaction = db.transaction(['players'], 'readwrite');
-        const store = transaction.objectStore('players');
-        const request = store.delete(id);
-        
-        await new Promise((resolve) => {
-            request.onsuccess = resolve;
-        });
-        
-        await loadPlayers();
-        renderTable();
-        updateStats();
-    } catch (error) {
-        console.error("Error deleting player:", error);
-        alert("Failed to delete player: " + error.message);
-    }
-}
-
-// Initialize the application
+// Initialize the application with default maxPlayers = 21
 async function initializeApp() {
     try {
         await initDB();
         await loadPlayers();
         await loadTarget();
+        
+        // Set default maxPlayers to 21
+        document.getElementById('maxPlayers').value = '21';
         
         // Set up event listeners
         addPlayerBtn.addEventListener('click', addPlayer);
