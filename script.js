@@ -152,11 +152,12 @@ function updateStats() {
     const totalValue = players.reduce((sum, player) => sum + player.value, 0);
     const maxPlayers = parseInt(document.getElementById('maxPlayers').value) || 11;
     const remaining = targetValue ? Math.max(0, targetValue - totalValue) : 0;
-    const average = players.length > 0 ? Math.round(totalValue / players.length) : 0;
+    const remainingPlayers = Math.max(0, maxPlayers - players.length);
+    const average = remainingPlayers > 0 && targetValue ? Math.round(remaining / remainingPlayers) : 0;
     
     document.getElementById('totalValue').textContent = totalValue;
     document.getElementById('remainingValue').textContent = targetValue ? remaining : '-';
-    document.getElementById('averageValue').textContent = players.length > 0 ? average : '-';
+    document.getElementById('averageValue').textContent = targetValue ? (remainingPlayers > 0 ? average : '-') : '-';
 }
 
 // Add/Update player
@@ -229,7 +230,7 @@ async function deletePlayer(id) {
 async function updateTarget() {
     const newTarget = parseInt(targetInput.value);
     
-    if (isNaN(newTarget) {
+    if (isNaN(newTarget)) {
         alert("Please enter a valid number");
         return;
     }
@@ -290,4 +291,3 @@ document.getElementById('maxPlayers').addEventListener('change', updateStats);
 // Global functions (needed for inline event handlers in table)
 window.editPlayer = editPlayer;
 window.deletePlayer = deletePlayer;
-
