@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Players</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>My Players</h1>
+        
+        <div class="stats-container">
+            <div class="stat-card">
+                <div class="stat-value" id="targetValue"></div>
+                <div class="stat-label">Target Value</div>
+                <input type="number" id="targetInput" placeholder="Set target" class="target-input">
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="totalValue">0</div>
+                <div class="stat-label">Total Inserted</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="remainingValue"></div>
+                <div class="stat-label">Remaining</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="averageValue"></div>
+                <div class="stat-label">Avg per Player</div>
+            </div>
+        </div>
+
+        <div class="input-section">
+            <div class="input-form">
+                <div class="input-group">
+                    <label for="name">Name</label>
+                    <input type="text" id="name" required placeholder="Player name">
+                </div>
+                <div class="input-group">
+                    <label for="position">Position</label>
+                    <select id="position" required>
+                        <option value="select">Select Position</option>
+                        <option value="CF">CF (Center Forward)</option>
+                        <option value="SS">SS (Second Striker)</option>
+                        <option value="RWF">RWF (Right Wing)</option>
+                        <option value="LWF">LWF (Left Wing)</option>
+                        <option value="AMF">AMF (Attacking MF)</option>
+                        <option value="RMF">RMF (Right MF)</option>
+                        <option value="LMF">LMF (Left MF)</option>
+                        <option value="CMF">CMF (Center MF)</option>
+                        <option value="DMF">DMF (Defensive MF)</option>
+                        <option value="RB">RB (Right Back)</option>
+                        <option value="LB">LB (Left Back)</option>
+                        <option value="CB">CB (Center Back)</option>
+                        <option value="GK">GK (Goal Keeper)</option>                      
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label for="playingStyle">Playing Style</label>
+                    <select id="playingStyle" required>
+                        <option value="">Select Style</option>
+                        <option value="None">None</option>
+                        <option value="Goal Poacher">Goal Poacher</option>
+                        <option value="Dummy Runner">Dummy Runner</option>
+                        <option value="Fox in the Box">Fox in the Box</option>
+                        <option value="Prolific Winger">Prolific Winger</option>
+                        <option value="Classic No. 10">Classic No. 10</option>
+                        <option value="Hole Player">Hole Player</option>
+                        <option value="Box-to-Box">Box-to-Box</option>
+                        <option value="Anchor Man">Anchor Man</option>
+                        <option value="The Destroyer">The Destroyer</option>
+                        <option value="Build Up">Build Up</option>
+                        <option value="Offensive Full-back">Offensive Full-back</option>
+                        <option value="Defensive Full-back">Defensive Full-back</option>
+                        <option value="Cross Specialist">Cross Specialist</option>
+                        <option value="Roaming Flank">Roaming Flank</option>
+                        <option value="Full-back Finisher">Full-back Finisher</option>
+                        <option value="Defensive Goalkeeper">Defensive GK</option>
+                        <option value="Offensive Goalkeeper">Offensive GK</option>
+                    </select>
+                </div>
+                <div class="input-row">
+                    <div class="input-group">
+                        <label for="value">Value</label>
+                        <input type="number" id="value" required placeholder="Value" min="1" max="100000">
+                    </div>
+                    <div class="input-group">
+                        <label for="maxPlayers">Max Players</label>
+                        <input type="number" id="maxPlayers" value="11" min="1" max="50">
+                    </div>
+                </div>
+                <button type="button" class="btn add-btn" id="addPlayerBtn">Add Player</button>
+                <button type="button" class="btn reset-btn" id="resetBtn">Reset All Data</button>
+            </div>
+        </div>
+
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Position</th>
+                        <th>Playing Style</th>
+                        <th>Value</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody">
+                    <tr class="empty-state">
+                        <td colspan="5">
+                            <div class="empty-state-icon">⚽</div>
+                            <div>No players added yet. Add your first player above!</div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
