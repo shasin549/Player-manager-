@@ -2,6 +2,7 @@ let players = [];
 let targetValue;
 let editIndex = -1;
 let db;
+const CURRENT_DB_VERSION = 3; // Updated to match existing version
 
 // Define position order matching the dropdown
 const POSITION_ORDER = [
@@ -15,46 +16,55 @@ const addPlayerBtn = document.getElementById('addPlayerBtn');
 const resetBtn = document.getElementById('resetBtn');
 const targetInput = document.getElementById('targetInput');
 
-// Initialize IndexedDB
+// Initialize IndexedDB with version handling
 function initDB() {
     return new Promise((resolve, reject) => {
-        console.log('Initializing database...');
-        const request = indexedDB.open('PlayerManagerDB', 2); // Version 2
+        console.log(`Initializing database version ${CURRENT_DB_VERSION}...`);
+        const request = indexedDB.open('PlayerManagerDB', CURRENT_DB_VERSION);
         
         request.onerror = (event) => {
             console.error("Database error:", event.target.error);
             reject(new Error("Database error: " + event.target.error.message));
         };
         
+        request.onblocked = () => {
+            const error = "Database upgrade blocked by other connection";
+            console.error(error);
+            reject(new Error(error));
+        };
+        
         request.onsuccess = (event) => {
             db = event.target.result;
+            
+            // Add database error handler
+            db.onerror = (event) => {
+                console.error("Database error:", event.target.error);
+            };
+            
             console.log('Database opened successfully');
             resolve();
         };
         
         request.onupgradeneeded = (event) => {
-            console.log('Database upgrade needed');
             const db = event.target.result;
+            const oldVersion = event.oldVersion;
+            console.log(`Database upgrade needed from v${oldVersion} to v${CURRENT_DB_VERSION}`);
             
-            // Delete old stores if they exist
-            if (db.objectStoreNames.contains('players')) {
-                db.deleteObjectStore('players');
+            // Create fresh stores if they don't exist
+            if (!db.objectStoreNames.contains('players')) {
+                console.log('Creating players store');
+                const store = db.createObjectStore('players', { 
+                    keyPath: 'id', 
+                    autoIncrement: true 
+                });
+                store.createIndex('name', 'name', { unique: false });
+                store.createIndex('position', 'position', { unique: false });
             }
-            if (db.objectStoreNames.contains('settings')) {
-                db.deleteObjectStore('settings');
+            
+            if (!db.objectStoreNames.contains('settings')) {
+                console.log('Creating settings store');
+                db.createObjectStore('settings');
             }
-            
-            // Create fresh stores
-            console.log('Creating players store');
-            const store = db.createObjectStore('players', { 
-                keyPath: 'id', 
-                autoIncrement: true 
-            });
-            store.createIndex('name', 'name', { unique: false });
-            store.createIndex('position', 'position', { unique: false });
-            
-            console.log('Creating settings store');
-            db.createObjectStore('settings');
         };
     });
 }
@@ -147,31 +157,6 @@ async function savePlayer(player) {
     }
 }
 
-// Save target to DB
-async function saveTarget(value) {
-    try {
-        console.log('Saving target value:', value);
-        const transaction = db.transaction(['settings'], 'readwrite');
-        const store = transaction.objectStore('settings');
-        const request = store.put(value, 'targetValue');
-        
-        return new Promise((resolve, reject) => {
-            request.onsuccess = () => {
-                console.log('Target saved successfully');
-                resolve();
-            };
-            
-            request.onerror = (event) => {
-                console.error('Error saving target:', event.target.error);
-                reject(new Error('Failed to save target: ' + event.target.error));
-            };
-        });
-    } catch (error) {
-        console.error('Error in saveTarget:', error);
-        throw error;
-    }
-}
-
 // Delete player from DB
 async function deletePlayerFromDB(id) {
     try {
@@ -193,6 +178,31 @@ async function deletePlayerFromDB(id) {
         });
     } catch (error) {
         console.error('Error in deletePlayerFromDB:', error);
+        throw error;
+    }
+}
+
+// Save target to DB
+async function saveTarget(value) {
+    try {
+        console.log('Saving target value:', value);
+        const transaction = db.transaction(['settings'], 'readwrite');
+        const store = transaction.objectStore('settings');
+        const request = store.put(value, 'targetValue');
+        
+        return new Promise((resolve, reject) => {
+            request.onsuccess = () => {
+                console.log('Target saved successfully');
+                resolve();
+            };
+            
+            request.onerror = (event) => {
+                console.error('Error saving target:', event.target.error);
+                reject(new Error('Failed to save target: ' + event.target.error));
+            };
+        });
+    } catch (error) {
+        console.error('Error in saveTarget:', error);
         throw error;
     }
 }
@@ -411,10 +421,25 @@ async function resetApp() {
     }
 }
 
+// Temporary database reset function (run once then remove)
+async function resetDatabase() {
+    console.log('Resetting database...');
+    try {
+        indexedDB.deleteDatabase('PlayerManagerDB');
+        console.log('Database reset complete');
+        location.reload();
+    } catch (error) {
+        console.error('Error resetting database:', error);
+    }
+}
+
 // Initialize the application
 async function initializeApp() {
     try {
         console.log('Initializing application...');
+        
+        // Temporary: Uncomment to reset database once, then comment out again
+        // await resetDatabase();
         
         await initDB();
         await loadPlayers();
