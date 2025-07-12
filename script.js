@@ -2,47 +2,83 @@ let players = [];
 let targetValue;
 let editIndex = -1;
 let db;
+let dbVersion = 3; // Incremented version to ensure clean upgrade
 
 // DOM Elements
 const addPlayerBtn = document.getElementById('addPlayerBtn');
 const resetBtn = document.getElementById('resetBtn');
 const targetInput = document.getElementById('targetInput');
 
-// Initialize IndexedDB
+// Initialize IndexedDB with proper error handling
 function initDB() {
     return new Promise((resolve, reject) => {
-        const request = indexedDB.open('PlayerManagerDB', 1);
+        console.log('Initializing database...');
+        
+        if (!window.indexedDB) {
+            const error = "Your browser doesn't support IndexedDB";
+            console.error(error);
+            reject(new Error(error));
+            return;
+        }
+
+        const request = indexedDB.open('PlayerManagerDB', dbVersion);
         
         request.onerror = (event) => {
             console.error("Database error:", event.target.error);
             reject(new Error("Database error: " + event.target.error.message));
         };
         
+        request.onblocked = () => {
+            const error = "Database upgrade blocked by other connection";
+            console.error(error);
+            reject(new Error(error));
+        };
+        
         request.onsuccess = (event) => {
             db = event.target.result;
+            
+            // Add database error handler
+            db.onerror = (event) => {
+                console.error("Database error:", event.target.error);
+            };
+            
             console.log('Database opened successfully');
             resolve();
         };
         
         request.onupgradeneeded = (event) => {
+            console.log('Database upgrade needed');
             const db = event.target.result;
             
-            if (!db.objectStoreNames.contains('players')) {
-                const store = db.createObjectStore('players', { keyPath: 'id', autoIncrement: true });
-                store.createIndex('name', 'name', { unique: false });
-                store.createIndex('position', 'position', { unique: false });
+            // Delete old stores if they exist (clean upgrade)
+            if (db.objectStoreNames.contains('players')) {
+                db.deleteObjectStore('players');
+            }
+            if (db.objectStoreNames.contains('settings')) {
+                db.deleteObjectStore('settings');
             }
             
-            if (!db.objectStoreNames.contains('settings')) {
-                db.createObjectStore('settings');
-            }
+            // Create fresh stores
+            console.log('Creating players store');
+            const playersStore = db.createObjectStore('players', { 
+                keyPath: 'id', 
+                autoIncrement: true 
+            });
+            playersStore.createIndex('name', 'name', { unique: false });
+            playersStore.createIndex('position', 'position', { unique: false });
+            
+            console.log('Creating settings store');
+            db.createObjectStore('settings');
         };
     });
 }
 
-// Load players from DB
+// Improved loadPlayers with error handling
 async function loadPlayers() {
+    console.log('Loading players...');
     try {
+        if (!db) throw new Error("Database not initialized");
+        
         const transaction = db.transaction(['players'], 'readonly');
         const store = transaction.objectStore('players');
         const request = store.getAll();
@@ -50,11 +86,14 @@ async function loadPlayers() {
         return new Promise((resolve, reject) => {
             request.onsuccess = () => {
                 players = request.result || [];
+                console.log(`Loaded ${players.length} players`);
                 resolve(players);
             };
             
             request.onerror = (event) => {
-                reject(new Error('Failed to load players: ' + event.target.error));
+                const error = new Error('Failed to load players: ' + event.target.error);
+                console.error(error);
+                reject(error);
             };
         });
     } catch (error) {
@@ -63,34 +102,13 @@ async function loadPlayers() {
     }
 }
 
-// Load target value from DB
-async function loadTarget() {
-    try {
-        const transaction = db.transaction(['settings'], 'readonly');
-        const store = transaction.objectStore('settings');
-        const request = store.get('targetValue');
-        
-        return new Promise((resolve) => {
-            request.onsuccess = () => {
-                targetValue = request.result;
-                if (targetValue) {
-                    targetInput.value = targetValue;
-                    document.getElementById('targetValue').textContent = targetValue;
-                }
-                resolve(targetValue);
-            };
-            
-            request.onerror = () => resolve(null);
-        });
-    } catch (error) {
-        console.error('Error in loadTarget:', error);
-        return null;
-    }
-}
-
-// Save player to DB
+// Save player with validation
 async function savePlayer(player) {
+    console.log('Saving player:', player);
     try {
+        if (!db) throw new Error("Database not initialized");
+        if (!player.name) throw new Error("Player name is required");
+        
         const transaction = db.transaction(['players'], 'readwrite');
         const store = transaction.objectStore('players');
         
@@ -99,9 +117,15 @@ async function savePlayer(player) {
             : store.add(player);
         
         return new Promise((resolve, reject) => {
-            request.onsuccess = resolve;
+            request.onsuccess = () => {
+                console.log('Player saved successfully');
+                resolve();
+            };
+            
             request.onerror = (event) => {
-                reject(new Error('Failed to save player: ' + event.target.error));
+                const error = new Error('Failed to save player: ' + event.target.error);
+                console.error(error);
+                reject(error);
             };
         });
     } catch (error) {
@@ -110,76 +134,61 @@ async function savePlayer(player) {
     }
 }
 
-// Delete player from DB
-async function deletePlayerFromDB(id) {
+// Delete player with confirmation
+async function deletePlayer(id) {
+    console.log('Deleting player ID:', id);
+    if (!confirm('Are you sure you want to delete this player?')) {
+        console.log('Deletion cancelled');
+        return;
+    }
+    
     try {
+        if (!db) throw new Error("Database not initialized");
+        
         const transaction = db.transaction(['players'], 'readwrite');
         const store = transaction.objectStore('players');
         const request = store.delete(id);
         
-        return new Promise((resolve, reject) => {
-            request.onsuccess = resolve;
+        await new Promise((resolve, reject) => {
+            request.onsuccess = () => {
+                console.log('Player deleted successfully');
+                resolve();
+            };
+            
             request.onerror = (event) => {
-                reject(new Error('Failed to delete player: ' + event.target.error));
+                const error = new Error('Failed to delete player: ' + event.target.error);
+                console.error(error);
+                reject(error);
             };
         });
+        
+        await loadPlayers();
+        renderTable();
+        updateStats();
     } catch (error) {
-        console.error('Error in deletePlayerFromDB:', error);
-        throw error;
+        console.error("Error deleting player:", error);
+        alert("Failed to delete player: " + error.message);
     }
 }
 
-// Save target to DB
-async function saveTarget(value) {
-    try {
-        const transaction = db.transaction(['settings'], 'readwrite');
-        const store = transaction.objectStore('settings');
-        const request = store.put(value, 'targetValue');
-        
-        return new Promise((resolve, reject) => {
-            request.onsuccess = resolve;
-            request.onerror = (event) => {
-                reject(new Error('Failed to save target: ' + event.target.error));
-            };
-        });
-    } catch (error) {
-        console.error('Error in saveTarget:', error);
-        throw error;
-    }
-}
-
-// Reset all data
-async function clearDB() {
-    try {
-        const transaction = db.transaction(['players', 'settings'], 'readwrite');
-        const playersStore = transaction.objectStore('players');
-        const settingsStore = transaction.objectStore('settings');
-        
-        await Promise.all([
-            new Promise((resolve, reject) => { 
-                playersStore.clear().onsuccess = resolve;
-                playersStore.clear().onerror = (event) => {
-                    reject(new Error('Failed to clear players: ' + event.target.error));
-                };
-            }),
-            new Promise((resolve, reject) => { 
-                settingsStore.clear().onsuccess = resolve;
-                settingsStore.clear().onerror = (event) => {
-                    reject(new Error('Failed to clear settings: ' + event.target.error));
-                };
-            })
-        ]);
-    } catch (error) {
-        console.error('Error in clearDB:', error);
-        throw error;
-    }
+// Update statistics display
+function updateStats() {
+    const totalValue = players.reduce((sum, player) => sum + (player.value || 0), 0);
+    const maxPlayers = parseInt(document.getElementById('maxPlayers').value) || 11;
+    const remaining = targetValue ? Math.max(0, targetValue - totalValue) : 0;
+    const remainingPlayers = Math.max(0, maxPlayers - players.length);
+    const average = remainingPlayers > 0 && targetValue ? Math.round(remaining / remainingPlayers) : 0;
+    
+    document.getElementById('totalValue').textContent = totalValue;
+    document.getElementById('remainingValue').textContent = targetValue ? remaining : '-';
+    document.getElementById('averageValue').textContent = targetValue ? (remainingPlayers > 0 ? average : '-') : '-';
 }
 
 // Render players table
 function renderTable() {
     const tableBody = document.getElementById('tableBody');
     
-    if (players.length === 0) {
+    if (!players || players.length === 0) {
         tableBody.innerHTML = `
             <tr class="empty-state">
                 <td colspan="5">
@@ -193,10 +202,10 @@ function renderTable() {
     
     tableBody.innerHTML = players.map((player, index) => `
         <tr>
-            <td>${player.name}</td>
-            <td>${player.position}</td>
-            <td>${player.playingStyle}</td>
-            <td>${player.value}</td>
+            <td>${player.name || ''}</td>
+            <td>${player.position || ''}</td>
+            <td>${player.playingStyle || ''}</td>
+            <td>${player.value || ''}</td>
             <td>
                 <button class="action-btn edit-btn" onclick="editPlayer(${index})">Edit</button>
                 <button class="action-btn delete-btn" onclick="deletePlayer(${player.id})">Delete</button>
@@ -205,20 +214,22 @@ function renderTable() {
     `).join('');
 }
 
-// Update statistics
-function updateStats() {
-    const totalValue = players.reduce((sum, player) => sum + player.value, 0);
-    const maxPlayers = parseInt(document.getElementById('maxPlayers').value) || 11;
-    const remaining = targetValue ? Math.max(0, targetValue - totalValue) : 0;
-    const remainingPlayers = Math.max(0, maxPlayers - players.length);
-    const average = remainingPlayers > 0 && targetValue ? Math.round(remaining / remainingPlayers) : 0;
+// Edit player function
+function editPlayer(index) {
+    const player = players[index];
+    if (!player) return;
     
-    document.getElementById('totalValue').textContent = totalValue;
-    document.getElementById('remainingValue').textContent = targetValue ? remaining : '-';
-    document.getElementById('averageValue').textContent = targetValue ? (remainingPlayers > 0 ? average : '-') : '-';
+    document.getElementById('name').value = player.name || '';
+    document.getElementById('position').value = player.position || 'select';
+    document.getElementById('playingStyle').value = player.playingStyle || '';
+    document.getElementById('value').value = player.value || '';
+    
+    editIndex = index;
+    addPlayerBtn.textContent = 'Update Player';
+    console.log('Editing player:', player);
 }
 
-// Add/Update player
+// Add/Update player with validation
 async function addPlayer() {
     try {
         const name = document.getElementById('name').value.trim();
@@ -258,86 +269,14 @@ async function addPlayer() {
     }
 }
 
-// Edit player
-function editPlayer(index) {
-    const player = players[index];
-    document.getElementById('name').value = player.name;
-    document.getElementById('position').value = player.position;
-    document.getElementById('playingStyle').value = player.playingStyle;
-    document.getElementById('value').value = player.value;
-    
-    editIndex = index;
-    addPlayerBtn.textContent = 'Update Player';
-}
-
-// Delete player
-async function deletePlayer(id) {
-    if (!confirm('Are you sure you want to delete this player?')) return;
-    
-    try {
-        await deletePlayerFromDB(id);
-        await loadPlayers();
-        renderTable();
-        updateStats();
-    } catch (error) {
-        console.error("Error deleting player:", error);
-        alert("Failed to delete player: " + error.message);
-    }
-}
-
-// Update target value
-async function updateTarget() {
-    const newTarget = parseInt(targetInput.value);
-    
-    if (isNaN(newTarget)) {
-        alert("Please enter a valid number");
-        return;
-    }
-    
-    try {
-        targetValue = newTarget;
-        await saveTarget(targetValue);
-        document.getElementById('targetValue').textContent = targetValue;
-        updateStats();
-    } catch (error) {
-        console.error("Error updating target:", error);
-        alert("Failed to update target: " + error.message);
-    }
-}
-
-// Reset all data
-async function resetApp() {
-    if (!confirm('Are you sure you want to reset ALL data? This cannot be undone.')) return;
-    
-    try {
-        await clearDB();
-        players = [];
-        targetValue = undefined;
-        targetInput.value = '';
-        document.getElementById('name').value = '';
-        document.getElementById('position').value = 'select';
-        document.getElementById('playingStyle').value = '';
-        document.getElementById('value').value = '';
-        document.getElementById('maxPlayers').value = '11';
-        addPlayerBtn.textContent = 'Add Player';
-        editIndex = -1;
-        
-        renderTable();
-        updateStats();
-    } catch (error) {
-        console.error("Error resetting app:", error);
-        alert("Failed to reset data: " + error.message);
-    }
-}
-
 // Initialize the application
 async function initializeApp() {
     try {
+        console.log('Initializing application...');
+        
         await initDB();
         await loadPlayers();
         await loadTarget();
-        renderTable();
-        updateStats();
         
         // Set up event listeners
         addPlayerBtn.addEventListener('click', addPlayer);
@@ -345,9 +284,12 @@ async function initializeApp() {
         targetInput.addEventListener('change', updateTarget);
         document.getElementById('maxPlayers').addEventListener('change', updateStats);
         
-        // Make functions available globally for inline event handlers
+        // Make functions available globally
         window.editPlayer = editPlayer;
         window.deletePlayer = deletePlayer;
+        
+        renderTable();
+        updateStats();
         
         console.log('Application initialized successfully');
     } catch (error) {
@@ -356,5 +298,5 @@ async function initializeApp() {
     }
 }
 
-// Start the application when DOM is loaded
+// Start the application
 document.addEventListener('DOMContentLoaded', initializeApp);
